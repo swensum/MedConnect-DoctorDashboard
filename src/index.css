@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #10294d;
+  --color-bg: #e8f3ff;
+  --color-muted: #a8c7e5;
+  --color-ok: #3a9d6f;
+  --color-bad: #e0604d;
+  --color-t2: #6b7280;
+  --color-tx: #1c1c1e;
+
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-display: Manrope, Inter, sans-serif;
+
+  /* neumorphic shadows: shadow-neu, shadow-neu-s, shadow-inset ... */
+  --shadow-neu: 7px 7px 16px rgba(169,187,207,.65), -7px -7px 16px rgba(255,255,255,.9);
+  --shadow-neu-s: 4px 4px 9px rgba(169,187,207,.65), -4px -4px 9px rgba(255,255,255,.9);
+  --shadow-bubble: 3px 3px 7px rgba(169,187,207,.65), -3px -3px 7px rgba(255,255,255,.9);
+  --shadow-inset: inset 3px 3px 6px rgba(169,187,207,.65), inset -3px -3px 6px rgba(255,255,255,.9);
+  --shadow-field: inset 4px 4px 8px rgba(169,187,207,.65), inset -4px -4px 8px rgba(255,255,255,.9);
+  --shadow-field-focus: inset 5px 5px 10px rgba(169,187,207,.9), inset -5px -5px 10px rgba(255,255,255,.9), 0 0 0 2px rgba(16,41,77,.3);
+  --shadow-tag: inset 2px 2px 4px rgba(169,187,207,.65), inset -2px -2px 4px rgba(255,255,255,.9);
+  --shadow-av: inset 2px 2px 5px rgba(169,187,207,.65), inset -2px -2px 5px rgba(255,255,255,.9);
+  --shadow-press: inset 3px 3px 6px rgba(0,0,0,.35), inset -3px -3px 6px rgba(255,255,255,.08);
+  --shadow-chip-on: inset 2px 2px 5px rgba(0,0,0,.4), inset -2px -2px 5px rgba(255,255,255,.1);
+}
+
+@layer base {
+  body { @apply bg-bg text-tx font-sans text-sm leading-[1.45]; }
+  h1, h2, h3 { @apply font-display font-bold text-navy; }
+  :focus-visible { outline: 2px solid var(--color-navy); outline-offset: 3px; }
+}

@@ -41,12 +41,14 @@ function IconBtn({ icon, label, active, badge, onClick }) {
 const Close = ({ onClick }) => <Chip sm onClick={onClick}>Close</Chip>;
 
 /* ---------- call screen (fills the right column, NOT fullscreen) ---------- */
-function CallPanel({ kind, patient, onEnd }) {
-  const [secs, setSecs] = useState(0), [mic, setMic] = useState(true), [cam, setCam] = useState(kind === "Video");
+function CallPanel({ call, patient, onEnd }) {
+  const { kind, startedAt } = call;
+  const [, tick] = useState(0), [mic, setMic] = useState(true), [cam, setCam] = useState(kind === "Video");
   useEffect(() => {
-    const id = setInterval(() => setSecs((s) => s + 1), 1000);
+    const id = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, []);
+  const secs = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   const ctl = (on) =>
     `grid size-11 cursor-pointer place-items-center rounded-full text-xs font-bold transition active:scale-95 ${on ? "bg-white/20 text-white" : "bg-white text-navy"}`;
   return (

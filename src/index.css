@@ -17,13 +17,15 @@
   --animate-ring: ring 2s ease-out infinite;
   --animate-load: load 2s ease-in-out both;
   --animate-float: float 5s ease-in-out infinite;
+  --animate-slide-in: slide-in .55s cubic-bezier(.22,1,.36,1) backwards;
 
   @keyframes fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   @keyframes pop { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
   @keyframes ring { 0% { transform: scale(1); opacity: .5; } 100% { transform: scale(1.7); opacity: 0; } }
   @keyframes load { from { width: 0; } to { width: 100%; } }
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-
+  @keyframes slide-in { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
+  
   /* neumorphic shadows: shadow-neu, shadow-neu-s, shadow-inset ... */
   --shadow-neu: 7px 7px 16px rgba(169,187,207,.65), -7px -7px 16px rgba(255,255,255,.9);
   --shadow-neu-s: 4px 4px 9px rgba(169,187,207,.65), -4px -4px 9px rgba(255,255,255,.9);

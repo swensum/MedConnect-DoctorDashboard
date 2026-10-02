@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Logo } from "../components/ui";
 
 const Icon = ({ children, cls = "size-[22px]" }) => (
@@ -34,7 +34,66 @@ function DocPhoto({ cls = "size-full" }) {
   if (bad) return <span className="grid size-full place-items-center bg-navy font-display text-sm font-bold text-white">KP</span>;
   return <img src="/doctor1.jpg" alt="Dr. Kiran Poudel" className={`${cls} object-cover object-top`} onError={() => setBad(true)} />;
 }
+ function TopNav() {
+  const { pathname } = useLocation();
+  const activeIdx = NAV.findIndex(([to]) =>
+    to === "/" ? pathname === "/" : pathname.startsWith(to)
+  );
+  const [hover, setHover] = useState(null);
+  const [pill, setPill] = useState({ x: 0, w: 0 });
+  const [animate, setAnimate] = useState(false);
+  const refs = useRef([]);
+  const target = hover ?? activeIdx;
 
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = refs.current[target];
+      if (el) setPill({ x: el.offsetLeft, w: el.offsetWidth });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [target]);
+
+  // enable the slide transition only after the first placement (no slide-in from 0)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimate(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  return (
+    <nav
+      className="relative hidden items-center gap-1 rounded-full bg-bg p-1.5 shadow-neu-s min-[821px]:flex"
+      aria-label="Main"
+      onMouseLeave={() => setHover(null)}
+    >
+      {/* sliding pill */}
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-y-1.5 left-0 rounded-full bg-navy shadow-chip-on motion-reduce:transition-none ${
+          animate ? "transition-[transform,width] duration-300 ease-out" : ""
+        } ${target < 0 ? "opacity-0" : "opacity-100"}`}
+        style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
+      />
+      {NAV.map(([to, label], i) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === "/"}
+          ref={(el) => (refs.current[i] = el)}
+          onMouseEnter={() => setHover(i)}
+          onFocus={() => setHover(i)}
+          onBlur={() => setHover(null)}
+          className={`relative z-10 cursor-pointer rounded-full px-5 py-2.5 text-sm font-semibold transition-colors duration-300 motion-reduce:transition-none ${
+            i === target ? "text-white" : "text-navy/70"
+          }`}
+        >
+          {label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
 function ProfileMenu({ onLogout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -83,17 +142,7 @@ export default function AppLayout({ onLogout }) {
 
         <span className="flex-1" />
 
-        <nav className="hidden items-center gap-1 rounded-full bg-bg p-1.5 shadow-neu-s min-[821px]:flex" aria-label="Main">
-          {NAV.map(([to, label]) => (
-            <NavLink key={to} to={to} end={to === "/"}
-              className={({ isActive }) =>
-                `cursor-pointer rounded-full px-5 py-2.5 text-sm font-semibold transition-all motion-reduce:transition-none ${
-                  isActive ? "bg-navy text-white shadow-chip-on" : "text-navy/70 hover:text-navy"
-                }`}>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
+        <TopNav />
 
         <div className="flex items-center gap-3 min-[821px]:ml-2">
           <button className={roundBtn} aria-label="Notifications">

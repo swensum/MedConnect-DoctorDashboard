@@ -40,7 +40,7 @@ function IconBtn({ icon, label, active, badge, onClick }) {
 
 const Close = ({ onClick }) => <Chip sm onClick={onClick}>Close</Chip>;
 
-/* ---------- call screen (fills the right column, NOT fullscreen) ---------- */
+/* ---------- call screen (sits in the right column, NOT fullscreen) ---------- */
 function CallPanel({ call, patient, onEnd }) {
   const { kind, startedAt } = call;
   const [, tick] = useState(0), [mic, setMic] = useState(true), [cam, setCam] = useState(kind === "Video");
@@ -169,11 +169,22 @@ function RxPanel({ rx, setRx, nd, setNd, ns, setNs, toast, onClose }) {
 export default function Consult({ patient, toast }) {
   const [msgs, setMsgs] = useState(CHAT0), [txt, setTxt] = useState("");
   const [rx, setRx] = useState([{ d: "Sumatriptan 50mg", s: "1 tablet at onset, max 2/day" }]), [nd, setNd] = useState(""), [ns, setNs] = useState("");
-  const [call, setCall] = useState(null);   // null | "Video" | "Voice"
-  const [panel, setPanel] = useState(null); // null | "records" | "rx"  (floats over the right column)
+
+  // call survives a remount (kept in sessionStorage): null | { kind, startedAt }
+  const [call, setCall] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("mc_call")); } catch { return null; }
+  });
+  const [panel, setPanel] = useState(null); // null | "records" | "rx"
   const box = useRef(null);
 
+  useEffect(() => {
+    try {
+      call ? sessionStorage.setItem("mc_call", JSON.stringify(call)) : sessionStorage.removeItem("mc_call");
+    } catch {}
+  }, [call]);
+
   useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight; }, [msgs]);
+
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && setPanel(null);
     document.addEventListener("keydown", esc);
@@ -181,7 +192,7 @@ export default function Consult({ patient, toast }) {
   }, []);
 
   const send = () => { if (!txt.trim()) return; setMsgs([...msgs, { me: 1, t: txt.trim() }]); setTxt(""); };
-  const start = (k) => { setCall(k); toast(`${k} call started (demo)`); };
+  const start = (k) => setCall({ kind: k, startedAt: Date.now() }); // no toast here
   const end = () => { setCall(null); setPanel((p) => (p === "rx" ? null : p)); toast("Call ended"); };
   const toggle = (p) => setPanel(panel === p ? null : p);
 
@@ -189,6 +200,7 @@ export default function Consult({ patient, toast }) {
 
   return (
     <div className="grid gap-[22px]">
+      {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <Avatar>{init(patient.name)}</Avatar>
         <div>
@@ -197,7 +209,7 @@ export default function Consult({ patient, toast }) {
         </div>
         <span className="flex-1" />
         <IconBtn icon="records" label="Reports & lab tests" active={panel === "records"} badge={REPORTS.length + LABS.length} onClick={() => toggle("records")} />
-        {/* Prescription turns into an icon only while a call is running */}
+        {/* Prescription becomes an icon only while a call is running */}
         {call && <IconBtn icon="rx" label="E-prescription" active={panel === "rx"} badge={rx.length} onClick={() => toggle("rx")} />}
         <Btn variant="ghost" size="sm" disabled={!!call} onClick={() => start("Video")}>Video</Btn>
         <Btn variant="ghost" size="sm" disabled={!!call} onClick={() => start("Voice")}>Voice</Btn>
@@ -212,24 +224,19 @@ export default function Consult({ patient, toast }) {
             ))}
           </div>
           <div className="flex items-end gap-3 p-4">
+            {/* Enter sends, Shift+Enter adds a new line */}
             <NeuInput area className="flex-1" placeholder="Type a message" value={txt} onChange={(e) => setTxt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <Btn size="lg" disabled={!txt.trim()} onClick={send}>Send</Btn>
           </div>
         </div>
 
-        {/* Right column: call screen replaces the prescription; panels float on top */}
-        <div className="relative min-h-[440px]">
-          {call ? <CallPanel kind={call} patient={patient} onEnd={end} /> : <RxPanel {...rxProps} />}
+        {/* Call (or inline prescription when there is no call) */}
+        {call ? <CallPanel call={call} patient={patient} onEnd={end} /> : <RxPanel {...rxProps} />}
 
-          {panel && (
-            <div className="absolute inset-0 z-10 shadow-neu">
-              {panel === "records"
-                ? <ReportsPanel onClose={() => setPanel(null)} />
-                : <RxPanel {...rxProps} onClose={() => setPanel(null)} />}
-            </div>
-          )}
-        </div>
+        {/* Reports / prescription open in their own card, never over the call */}
+        {panel === "records" && <ReportsPanel onClose={() => setPanel(null)} />}
+        {panel === "rx" && <RxPanel {...rxProps} onClose={() => setPanel(null)} />}
       </div>
     </div>
   );

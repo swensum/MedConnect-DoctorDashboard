@@ -5,7 +5,7 @@ const Ico = ({ children, cls = "size-5" }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`${cls} shrink-0`}>{children}</svg>
 );
 
-/* Dark neumorphism: one navy surface, shapes pushed out of it or pressed into it */
+
 const raised = "bg-navy shadow-[8px_8px_18px_rgba(3,10,24,.65),-6px_-6px_16px_rgba(52,88,144,.28)]";
 const inset = "bg-navy shadow-[inset_4px_4px_9px_rgba(3,10,24,.65),inset_-3px_-3px_8px_rgba(52,88,144,.25)]";
 const focusRing = "focus-within:ring-2 focus-within:ring-sky-300/50";
@@ -23,7 +23,6 @@ const Spinner = () => (
   </svg>
 );
 
-/* Live heartbeat line. Spikes whenever `beat` changes (typing, sending, verifying). */
 function Heartbeat({ beat }) {
   const cv = useRef(null), boost = useRef(0);
 

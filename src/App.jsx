@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { APPTS0 } from "./components/data";
 import AppLayout from "./layouts/AppLayout";
@@ -7,12 +7,15 @@ import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
 import Consult from "./pages/Consult";
 import Availability from "./pages/Availability";
+import Splash from "./pages/Splash";
 
 export default function App() {
   const nav = useNavigate();
   const [user, setUser] = useState(null); // TODO: replace with Firebase onAuthStateChanged
   const [appts, setAppts] = useState(APPTS0);
   const [t, setT] = useState("");
+  const [splash, setSplash] = useState(true);
+  const endSplash = useCallback(() => setSplash(false), []);
   const toast = (m) => { setT(m); setTimeout(() => setT(""), 2200); };
   const logout = () => { setUser(null); nav("/login"); };
 
@@ -24,6 +27,8 @@ export default function App() {
     return <Consult key={p.id} patient={p} toast={toast} />;
   };
   const firstUp = appts.find((a) => a.status === "upcoming") || appts[0];
+
+  if (splash) return <Splash onDone={endSplash} />;
 
   return (
     <>

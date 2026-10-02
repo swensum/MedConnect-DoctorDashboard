@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DAYS } from "../components/data";
-import { Btn, Chip, NeuInput, inset, neu } from "../components/ui";
+import { Btn, Chip, NeuInput, fieldBase, inset, neu } from "../components/ui";
 
 /* ---------- helpers ---------- */
 const TYPES = {
@@ -9,6 +9,7 @@ const TYPES = {
   hospital: { label: "Hospital", dot: "bg-[#6f93c4]" },
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
+const pad = (n) => String(n).padStart(2, "0");
 const mins = (t) => { const [h, m] = t.split(":"); return +h * 60 + +m; };
 const fmt = (t) => {
   const [h, m] = t.split(":"); const H = +h;
@@ -26,7 +27,70 @@ const START = {
   Sun: [],
 };
 
-/* Week overview bar: 6 AM to 10 PM */
+/* ---------- neumorphic time picker (AM/PM) ---------- */
+const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+const cell = "h-9 cursor-pointer rounded-xl text-[13px] font-semibold transition active:scale-95 motion-reduce:transition-none";
+const cellCls = (on) => `${cell} ${on ? "bg-navy text-white shadow-chip-on" : "bg-bg text-navy shadow-neu-s"}`;
+
+function TimePicker({ label, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  const [H, M] = value.split(":").map(Number);
+  const pm = H >= 12, h12 = H % 12 || 12;
+  const set = (h, m, p) => onChange(`${pad((h % 12) + (p ? 12 : 0))}:${pad(m)}`);
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="mb-2 ml-1 text-xs font-semibold text-navy">{label}</div>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${label} time, ${fmt(value)}`}
+        className={`${fieldBase} w-full cursor-pointer justify-between px-4 text-left`}>
+        <span className="font-display text-base font-bold text-navy">{fmt(value)}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-5 text-navy/70" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-[18px] bg-bg p-4 shadow-neu" role="dialog" aria-label={`Pick ${label} time`}>
+          <div className="mb-3 flex items-center justify-between">
+            <b className="font-display text-xl text-navy">{fmt(value)}</b>
+            <div className={`${inset} flex p-1`}>
+              {[["AM", false], ["PM", true]].map(([t, p]) => (
+                <button key={t} type="button" onClick={() => set(h12, M, p)}
+                  className={`h-8 w-12 cursor-pointer rounded-[10px] text-[13px] font-bold transition motion-reduce:transition-none ${pm === p ? "bg-navy text-white shadow-chip-on" : "text-navy/70"}`}>{t}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-1.5 ml-1 text-[11px] font-semibold uppercase tracking-wider text-t2">Hour</div>
+          <div className="mb-3 grid grid-cols-4 gap-2">
+            {HOURS.map((h) => <button key={h} type="button" className={cellCls(h === h12)} onClick={() => set(h, M, pm)}>{h}</button>)}
+          </div>
+
+          <div className="mb-1.5 ml-1 text-[11px] font-semibold uppercase tracking-wider text-t2">Minute</div>
+          <div className="mb-4 grid grid-cols-4 gap-2">
+            {MINS.map((m) => <button key={m} type="button" className={cellCls(m === M)} onClick={() => set(h12, m, pm)}>{pad(m)}</button>)}
+          </div>
+
+          <Btn size="sm" className="w-full" onClick={() => setOpen(false)}>Done</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- week overview bar: 6 AM to 10 PM ---------- */
 const R0 = 6 * 60, R1 = 22 * 60;
 function DayBar({ list }) {
   return (
@@ -57,7 +121,8 @@ export default function Availability({ toast }) {
   const add = (type) => {
     const last = list[list.length - 1];
     const from = last ? last.to : "09:00";
-    const to = mins(from) + 120 > 23 * 60 ? "23:00" : `${String(Math.floor((mins(from) + 120) / 60)).padStart(2, "0")}:${String((mins(from) + 120) % 60).padStart(2, "0")}`;
+    const end = Math.min(mins(from) + 120, 23 * 60 + 55);
+    const to = `${pad(Math.floor(end / 60))}:${pad(end % 60)}`;
     setList(day, [...list, mk(type, from, to)]);
   };
   const copyWeekdays = () => {
@@ -118,8 +183,8 @@ export default function Availability({ toast }) {
                   <Chip sm onClick={() => setList(day, list.filter((x) => x.id !== s.id))}>Remove</Chip>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.6fr]">
-                  <NeuInput label="From" type="time" value={s.from} onChange={(e) => upd(s.id, { from: e.target.value })} />
-                  <NeuInput label="To" type="time" value={s.to} onChange={(e) => upd(s.id, { to: e.target.value })} />
+                  <TimePicker label="From" value={s.from} onChange={(v) => upd(s.id, { from: v })} />
+                  <TimePicker label="To" value={s.to} onChange={(v) => upd(s.id, { to: v })} />
                   {s.type === "video" ? (
                     <div className="flex items-end pb-3 text-[13px] text-t2">Online video call. No place needed.</div>
                   ) : (

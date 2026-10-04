@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth } from "../firebase";
 import { Logo } from "../components/ui";
 
 const Ico = ({ children, cls = "size-5" }) => (
@@ -71,8 +73,9 @@ export default function Login({ onIn }) {
   const [step, setStep] = useState(0), [ph, setPh] = useState(""), [err, setErr] = useState("");
   const [otp, setOtp] = useState(Array(6).fill(""));
   const [wait, setWait] = useState(0), [beat, setBeat] = useState(0), [loading, setLoading] = useState(false), [verifying, setVerifying] = useState(false);
-  const sendTimer = useRef(null), verifyTimer = useRef(null);
   const refs = useRef([]);
+  const confirmationRef = useRef(null); // holds the Firebase confirmationResult between steps
+  const recaptchaRef = useRef(null);
   const ping = () => setBeat((b) => b + 1);
 
   useEffect(() => {
@@ -81,23 +84,37 @@ export default function Login({ onIn }) {
     return () => clearTimeout(t);
   }, [wait]);
 
-  useEffect(() => () => { clearTimeout(sendTimer.current); clearTimeout(verifyTimer.current); }, []);
+  // Set up the invisible reCAPTCHA once, on mount.
+  useEffect(() => {
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+      });
+    }
+  }, []);
 
-  // Shows a 5 second loading state, then moves to the code step.
-  // TODO: call Firebase signInWithPhoneNumber here and drop the fake delay.
-  const sendCode = () => {
+  const sendCode = async () => {
     if (loading) return;
-    setLoading(true); ping();
-    sendTimer.current = setTimeout(() => {
-      setLoading(false); setStep(1); setWait(30); setErr(""); ping();
+    setLoading(true); ping(); setErr("");
+
+    try {
+      const fullNumber = `+977${ph}`; // adjust country code if needed
+      const confirmation = await signInWithPhoneNumber(auth, fullNumber, recaptchaRef.current);
+      confirmationRef.current = confirmation;
+      setLoading(false); setStep(1); setWait(30); ping();
       setTimeout(() => refs.current[0]?.focus(), 50);
-    }, 5000);
+    } catch (e) {
+      setLoading(false);
+      setErr(e.code === "auth/invalid-phone-number" ? "Enter a valid phone number" : "Couldn't send code. Try again.");
+    }
   };
+
   const setD = (i, v) => {
     v = v.replace(/\D/g, "").slice(-1);
     const o = [...otp]; o[i] = v; setOtp(o); setErr(""); ping();
     if (v && i < 5) refs.current[i + 1].focus();
   };
+
   const paste = (e) => {
     const d = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (!d) return;
@@ -105,17 +122,26 @@ export default function Login({ onIn }) {
     setOtp(Array.from({ length: 6 }, (_, i) => d[i] || ""));
     refs.current[Math.min(d.length, 5)].focus(); ping();
   };
-  // TODO: replace with Firebase confirmationResult.confirm(code)
-  // Shows a 3 second loading state, then checks the code.
-  const verify = () => {
-    if (verifying) return;
+
+  const verify = async () => {
+    if (verifying || !confirmationRef.current) return;
     setVerifying(true); setErr(""); ping();
-    verifyTimer.current = setTimeout(() => {
+
+    try {
+      const code = otp.join("");
+      const result = await confirmationRef.current.confirm(code);
       setVerifying(false); ping();
-      otp.join("") === "123456" ? onIn(ph) : setErr("That code is incorrect. Use 123456 in this demo.");
-    }, 3000);
+      onIn(result.user.phoneNumber); // real Firebase user now, not a fake string
+    } catch (e) {
+      setVerifying(false);
+      setErr("That code is incorrect.");
+    }
   };
-  const resend = () => { setOtp(Array(6).fill("")); setErr(""); setWait(30); ping(); refs.current[0]?.focus(); };
+
+  const resend = () => {
+    setOtp(Array(6).fill("")); setErr(""); setWait(30); ping(); refs.current[0]?.focus();
+    sendCode(); // Firebase needs a fresh signInWithPhoneNumber call to resend
+  };
 
   const primary = "mt-6 w-full cursor-pointer rounded-2xl bg-white py-4 font-semibold text-navy shadow-[5px_5px_12px_rgba(3,10,24,.55),-4px_-4px_10px_rgba(52,88,144,.22)] transition active:translate-y-px active:shadow-[inset_3px_3px_7px_rgba(3,10,24,.25)] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none";
   const link = "cursor-pointer font-semibold text-white/90 underline-offset-4 hover:underline";
@@ -125,6 +151,7 @@ export default function Login({ onIn }) {
       {/* ---------- ONE navy container raised from a muted blue screen ---------- */}
       <div className="relative grid min-h-[calc(100vh-1.5rem)] items-center gap-10 overflow-hidden rounded-[40px] bg-navy p-6 text-white shadow-[18px_18px_40px_rgba(16,32,62,.55),-14px_-14px_34px_rgba(150,182,228,.35)] sm:min-h-[calc(100vh-2rem)] sm:p-10 lg:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:p-14">
         <Heartbeat beat={beat} />
+        <div id="recaptcha-container" />
 
         {/* Left: brand, headline, schedule */}
         <section className="relative flex flex-col gap-10 lg:h-full lg:justify-between">

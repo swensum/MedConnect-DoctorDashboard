@@ -74,7 +74,7 @@ export default function Login({ onIn }) {
   const [otp, setOtp] = useState(Array(6).fill(""));
   const [wait, setWait] = useState(0), [beat, setBeat] = useState(0), [loading, setLoading] = useState(false), [verifying, setVerifying] = useState(false);
   const refs = useRef([]);
-  const confirmationRef = useRef(null); // holds the Firebase confirmationResult between steps
+  const confirmationRef = useRef(null);
   const recaptchaRef = useRef(null);
   const ping = () => setBeat((b) => b + 1);
 
@@ -84,13 +84,25 @@ export default function Login({ onIn }) {
     return () => clearTimeout(t);
   }, [wait]);
 
-  // Set up the invisible reCAPTCHA once, on mount.
+  // Set up + explicitly render the invisible reCAPTCHA once, on mount.
+  // Explicit .render() is more reliable than letting signInWithPhoneNumber
+  // auto-render it on first call — avoids some "already rendered" or
+  // timing-related 400s.
   useEffect(() => {
     if (!recaptchaRef.current) {
       recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
       });
+      recaptchaRef.current.render().catch((e) => {
+        console.error("reCAPTCHA render failed:", e);
+      });
     }
+    return () => {
+      // Clean up on unmount so a hot-reload/navigate-away doesn't leave a
+      // stale verifier bound to a removed DOM node.
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
   }, []);
 
   const sendCode = async () => {
@@ -98,14 +110,34 @@ export default function Login({ onIn }) {
     setLoading(true); ping(); setErr("");
 
     try {
-      const fullNumber = `+977${ph}`; // adjust country code if needed
+      const fullNumber = `+977${ph}`;
       const confirmation = await signInWithPhoneNumber(auth, fullNumber, recaptchaRef.current);
       confirmationRef.current = confirmation;
       setLoading(false); setStep(1); setWait(30); ping();
       setTimeout(() => refs.current[0]?.focus(), 50);
     } catch (e) {
       setLoading(false);
-      setErr(e.code === "auth/invalid-phone-number" ? "Enter a valid phone number" : "Couldn't send code. Try again.");
+      // Log the real Firebase error code/message so we can see exactly
+      // why the 400 happened (invalid number, captcha check failed,
+      // quota exceeded, app-not-authorized, etc.) instead of guessing.
+      console.error("signInWithPhoneNumber failed:", e.code, e.message, e);
+
+      const messages = {
+        "auth/invalid-phone-number": "Enter a valid phone number.",
+        "auth/captcha-check-failed": "reCAPTCHA check failed — refresh and try again.",
+        "auth/quota-exceeded": "SMS quota exceeded for this project today.",
+        "auth/too-many-requests": "Too many attempts — try again later.",
+        "auth/invalid-app-credential": "App not authorized for phone auth — check Firebase Console setup.",
+      };
+      setErr(messages[e.code] || `Couldn't send code (${e.code || "unknown error"}). Check console for details.`);
+
+      // Reset the verifier after a failure — a used/failed RecaptchaVerifier
+      // often can't be reused for a retry without this.
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+      });
+      recaptchaRef.current.render().catch(() => {});
     }
   };
 
@@ -131,8 +163,9 @@ export default function Login({ onIn }) {
       const code = otp.join("");
       const result = await confirmationRef.current.confirm(code);
       setVerifying(false); ping();
-      onIn(result.user.phoneNumber); // real Firebase user now, not a fake string
+      onIn(result.user.phoneNumber);
     } catch (e) {
+      console.error("OTP confirm failed:", e.code, e.message, e);
       setVerifying(false);
       setErr("That code is incorrect.");
     }
@@ -140,7 +173,7 @@ export default function Login({ onIn }) {
 
   const resend = () => {
     setOtp(Array(6).fill("")); setErr(""); setWait(30); ping(); refs.current[0]?.focus();
-    sendCode(); // Firebase needs a fresh signInWithPhoneNumber call to resend
+    sendCode();
   };
 
   const primary = "mt-6 w-full cursor-pointer rounded-2xl bg-white py-4 font-semibold text-navy shadow-[5px_5px_12px_rgba(3,10,24,.55),-4px_-4px_10px_rgba(52,88,144,.22)] transition active:translate-y-px active:shadow-[inset_3px_3px_7px_rgba(3,10,24,.25)] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none";
@@ -148,12 +181,10 @@ export default function Login({ onIn }) {
 
   return (
     <div className="min-h-screen bg-[#E8F3FF] p-3 sm:p-4 lg:p-5">
-      {/* ---------- ONE navy container raised from a muted blue screen ---------- */}
       <div className="relative grid min-h-[calc(100vh-1.5rem)] items-center gap-10 overflow-hidden rounded-[40px] bg-navy p-6 text-white shadow-[18px_18px_40px_rgba(16,32,62,.55),-14px_-14px_34px_rgba(150,182,228,.35)] sm:min-h-[calc(100vh-2rem)] sm:p-10 lg:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:p-14">
         <Heartbeat beat={beat} />
-        <div id="recaptcha-container" />
+        <div id="recaptcha-container" className="hidden" />
 
-        {/* Left: brand, headline, schedule */}
         <section className="relative flex flex-col gap-10 lg:h-full lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="grid size-12 place-items-center rounded-2xl bg-white shadow-[4px_4px_10px_rgba(3,10,24,.5)]"><Logo size={34} /></div>
@@ -186,7 +217,6 @@ export default function Login({ onIn }) {
           </div>
         </section>
 
-        {/* Right: login card, same raised style as the patient cards */}
         <section className="relative grid place-items-center">
           <div className={`${raised} w-full max-w-[440px] rounded-3xl p-7 animate-fade-up motion-reduce:animate-none sm:p-9`}>
             <div className="mb-6 flex items-center gap-4">
@@ -214,6 +244,7 @@ export default function Login({ onIn }) {
                     onKeyDown={(e) => e.key === "Enter" && ph.length >= 7 && sendCode()} />
                 </div>
                 <p className="ml-1 mt-2 text-[12px] text-white/55">We will send a 6-digit code by SMS.</p>
+                {err && <div className="mt-3 text-[13px] text-red-300" role="alert">{err}</div>}
                 <button className={primary} disabled={ph.length < 7 || loading} aria-busy={loading} onClick={sendCode}>
                   {loading ? (
                     <span className="flex items-center justify-center gap-2.5">
@@ -256,7 +287,6 @@ export default function Login({ onIn }) {
               </>
             )}
 
-            {/* dot indicator */}
             <div className="mt-7 flex justify-center gap-2" aria-hidden="true">
               {[0, 1].map((n) => (
                 <i key={n} className={`h-2 rounded-full transition-all duration-300 motion-reduce:transition-none ${step === n ? "w-6 bg-sky-300" : "w-2 bg-white/25"}`} />

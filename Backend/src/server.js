@@ -1,33 +1,42 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client"; 
-const app = express();//creating server
+import { z } from "zod";
+
+const app = express();
+const prisma = new PrismaClient(); 
 
 app.use(express.json());
 
-const appointments = []; // NEW: our fake database (lives in memory)
+const appointmentSchema = z.object({
+  patientName: z.string().trim().min(2).max(80),
+  reason: z.string().trim().max(200).optional(),
+});
 
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
 // NEW: return all appointments
-app.get("/appointments", (req, res) => {//The browser sends: GET /appointments Express receives it. Then: res.json(appointments); sends the response back.
+app.get("/appointments", async (req, res) => {//The browser sends: GET /appointments Express receives it. Then: res.json(appointments); sends the response back.
+  const appointments = await prisma.appointment.findMany(); 
   res.json(appointments);
 });
 
 // CHANGED: now it saves the data
-app.post("/appointments", (req, res) => {
-  const { patientName, reason } = req.body;
+app.post("/appointments", async (req, res) => {
+  const result = appointmentSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({
+      error: "Invalid data",
+      details: result.error.flatten().fieldErrors,
+    });
+  }
 
-  const appointment = {
-    id: appointments.length + 1,
-    patientName,
-    reason,
-    status: "pending",
-  };
+  const appointment = await prisma.appointment.create({
+    data: result.data,
+  });
 
-  appointments.push(appointment);
-  res.status(201).json(appointment);
+   res.status(201).json(appointment);
 });
 
-app.listen(4000, () => console.log("Server running on http://localhost:4000")); //
+app.listen(4000, () => console.log("Server running on http://localhost:4000"));

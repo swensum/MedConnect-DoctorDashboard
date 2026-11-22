@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
-import { auth } from "../firebase";
+import { supabase } from "../supabase";
 import { Logo } from "../components/ui";
 
 const Ico = ({ children, cls = "size-5" }) => (
@@ -74,9 +73,8 @@ export default function Login({ onIn }) {
   const [otp, setOtp] = useState(Array(6).fill(""));
   const [wait, setWait] = useState(0), [beat, setBeat] = useState(0), [loading, setLoading] = useState(false), [verifying, setVerifying] = useState(false);
   const refs = useRef([]);
-  const confirmationRef = useRef(null);
-  const recaptchaRef = useRef(null);
   const ping = () => setBeat((b) => b + 1);
+  const fullNumber = `+977${ph}`;
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -84,61 +82,26 @@ export default function Login({ onIn }) {
     return () => clearTimeout(t);
   }, [wait]);
 
-  // Set up + explicitly render the invisible reCAPTCHA once, on mount.
-  // Explicit .render() is more reliable than letting signInWithPhoneNumber
-  // auto-render it on first call — avoids some "already rendered" or
-  // timing-related 400s.
-  useEffect(() => {
-    if (!recaptchaRef.current) {
-      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-      });
-      recaptchaRef.current.render().catch((e) => {
-        console.error("reCAPTCHA render failed:", e);
-      });
-    }
-    return () => {
-      // Clean up on unmount so a hot-reload/navigate-away doesn't leave a
-      // stale verifier bound to a removed DOM node.
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-    };
-  }, []);
-
+  // Supabase sends the SMS itself (no reCAPTCHA needed on our side).
   const sendCode = async () => {
     if (loading) return;
     setLoading(true); ping(); setErr("");
 
-    try {
-      const fullNumber = `+977${ph}`;
-      const confirmation = await signInWithPhoneNumber(auth, fullNumber, recaptchaRef.current);
-      confirmationRef.current = confirmation;
-      setLoading(false); setStep(1); setWait(30); ping();
-      setTimeout(() => refs.current[0]?.focus(), 50);
-    } catch (e) {
-      setLoading(false);
-      // Log the real Firebase error code/message so we can see exactly
-      // why the 400 happened (invalid number, captcha check failed,
-      // quota exceeded, app-not-authorized, etc.) instead of guessing.
-      console.error("signInWithPhoneNumber failed:", e.code, e.message, e);
+    const { error } = await supabase.auth.signInWithOtp({ phone: fullNumber });
+    setLoading(false);
 
-      const messages = {
-        "auth/invalid-phone-number": "Enter a valid phone number.",
-        "auth/captcha-check-failed": "reCAPTCHA check failed — refresh and try again.",
-        "auth/quota-exceeded": "SMS quota exceeded for this project today.",
-        "auth/too-many-requests": "Too many attempts — try again later.",
-        "auth/invalid-app-credential": "App not authorized for phone auth — check Firebase Console setup.",
-      };
-      setErr(messages[e.code] || `Couldn't send code (${e.code || "unknown error"}). Check console for details.`);
-
-      // Reset the verifier after a failure — a used/failed RecaptchaVerifier
-      // often can't be reused for a retry without this.
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-      });
-      recaptchaRef.current.render().catch(() => {});
+    if (error) {
+      console.error("signInWithOtp failed:", error.status, error.code, error.message);
+      setErr(
+        error.status === 429
+          ? "Too many attempts — try again later."
+          : error.message || "Couldn't send code. Check console for details."
+      );
+      return;
     }
+
+    setStep(1); setWait(30); ping();
+    setTimeout(() => refs.current[0]?.focus(), 50);
   };
 
   const setD = (i, v) => {
@@ -156,19 +119,22 @@ export default function Login({ onIn }) {
   };
 
   const verify = async () => {
-    if (verifying || !confirmationRef.current) return;
+    if (verifying) return;
     setVerifying(true); setErr(""); ping();
 
-    try {
-      const code = otp.join("");
-      const result = await confirmationRef.current.confirm(code);
-      setVerifying(false); ping();
-      onIn(result.user.phoneNumber);
-    } catch (e) {
-      console.error("OTP confirm failed:", e.code, e.message, e);
-      setVerifying(false);
-      setErr("That code is incorrect.");
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: fullNumber,
+      token: otp.join(""),
+      type: "sms",
+    });
+    setVerifying(false); ping();
+
+    if (error || !data.user) {
+      console.error("verifyOtp failed:", error?.status, error?.code, error?.message);
+      setErr("That code is incorrect or expired.");
+      return;
     }
+    onIn(data.user.phone);
   };
 
   const resend = () => {
@@ -183,7 +149,6 @@ export default function Login({ onIn }) {
     <div className="min-h-screen bg-[#E8F3FF] p-3 sm:p-4 lg:p-5">
       <div className="relative grid min-h-[calc(100vh-1.5rem)] items-center gap-10 overflow-hidden rounded-[40px] bg-navy p-6 text-white shadow-[18px_18px_40px_rgba(16,32,62,.55),-14px_-14px_34px_rgba(150,182,228,.35)] sm:min-h-[calc(100vh-2rem)] sm:p-10 lg:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:p-14">
         <Heartbeat beat={beat} />
-        <div id="recaptcha-container" className="hidden" />
 
         <section className="relative flex flex-col gap-10 lg:h-full lg:justify-between">
           <div className="flex items-center gap-3">

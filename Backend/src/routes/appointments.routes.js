@@ -14,7 +14,9 @@ const statusSchema = z.object({
 });
 
 router.get("/", async (req, res) => {
-  const appointments = await prisma.appointment.findMany();
+  const appointments = await prisma.appointment.findMany({
+    where: { doctorId: req.user.id },
+  });
   res.json(appointments);
 });
 
@@ -27,7 +29,7 @@ router.post("/", async (req, res) => {
     });
   }
 
-  const appointment = await prisma.appointment.create({ data: result.data });
+  const appointment = await prisma.appointment.create({ data: { ...result.data, doctorId: req.user.id },});
   res.status(201).json(appointment);
 });
 
@@ -47,9 +49,9 @@ router.patch("/:id", async (req, res) => {
 
   try {
     const appointment = await prisma.appointment.update({
-      where: { id },
-      data: { status: result.data.status },
-    });
+  where: { id, doctorId: req.user.id },
+  data: { status: result.data.status },
+});
     res.json(appointment);
   } catch (e) {
     if (e.code === "P2025") {

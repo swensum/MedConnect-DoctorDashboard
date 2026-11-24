@@ -9,7 +9,7 @@ export const supabase = createClient(
 // Helper: call your own backend with the logged-in user's token
 export async function api(path, options = {}) {
   const { data } = await supabase.auth.getSession();
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/api${path}`, {
+  const res = await fetch(`${import.meta.env.VITE_API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",

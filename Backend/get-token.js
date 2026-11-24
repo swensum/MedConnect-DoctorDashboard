@@ -2,7 +2,7 @@ import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const phone = "+9779800000000"; // your test number, with + in front
+const phone = process.argv[2] || "+9779800000000";
 const otp = "123456";           // your test OTP
 
 const { error } = await supabase.auth.signInWithOtp({ phone });

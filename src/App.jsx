@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
-import { APPTS0 } from "./components/data";
+import { supabase, api } from "./supabase";
 import AppLayout from "./layouts/AppLayout";
 import Login from "./pages/Login";
 import Kyc from "./pages/Kyc";
@@ -10,20 +10,55 @@ import Consult from "./pages/Consult";
 import Availability from "./pages/Availability";
 import Splash from "./pages/Splash";
 
+// Temporary: database rows have patientName, but the UI reads name, age, time, type.
+// This goes away when we add the real columns (next steps).
+const toUi = (a) => ({
+  ...a,
+  name: a.patientName,
+  age: "–",
+  time: new Date(a.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  type: "Chat",
+});
 
 export default function App() {
   const nav = useNavigate();
-  const [user, setUser] = useState(null); // TODO: replace with Firebase onAuthStateChanged
-  const [verified, setVerified] = useState(false); // TODO: read kycStatus === "approved" from Firestore
-  const [appts, setAppts] = useState(APPTS0);
+  const [user, setUser] = useState(null);
+  const [ready, setReady] = useState(false); // true once we know if a session exists
+  const [verified, setVerified] = useState(false); // still the demo gate, see the list below
+  const [appts, setAppts] = useState([]);
   const [t, setT] = useState("");
   const [splash, setSplash] = useState(true);
   const endSplash = useCallback(() => setSplash(false), []);
   const toast = (m) => { setT(m); setTimeout(() => setT(""), 2200); };
-  const logout = () => { setUser(null); setVerified(false); nav("/login"); };
   const { pathname } = useLocation();
   const section = pathname.startsWith("/login") ? "login" : pathname.startsWith("/register") ? "register" : "app";
-  // Not signed in -> login. Signed in but not approved -> register. Approved -> app.
+
+  // Restore the session after a refresh, and follow login/logout/token refresh.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user?.phone ?? null);
+      setReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user?.phone ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Load this doctor's appointments whenever a user is logged in.
+  useEffect(() => {
+    if (!user) { setAppts([]); return; }
+    api("/appointments")
+      .then((rows) => setAppts(rows.map(toUi)))
+      .catch((e) => toast(e.message));
+  }, [user]);
+
+  const logout = async () => {
+    await supabase.auth.signOut(); // really ends the session
+    setVerified(false);
+    nav("/login");
+  };
+
   const Guard = () => {
     if (!user) return <Navigate to="/login" replace />;
     if (!verified) return <Navigate to="/register" replace />;
@@ -37,12 +72,11 @@ export default function App() {
   };
   const firstUp = appts.find((a) => a.status === "upcoming") || appts[0];
 
-  if (splash) return <Splash onDone={endSplash} />;
+  if (splash || !ready) return <Splash onDone={endSplash} />;
 
   return (
     <>
      <div key={section} className="min-h-screen animate-slide-in overflow-x-clip motion-reduce:animate-none">
-
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login onIn={(ph) => { setUser(ph); nav("/"); }} />} />
         <Route path="/register" element={
@@ -53,7 +87,7 @@ export default function App() {
         <Route element={<Guard />}>
           <Route index element={<Dashboard appts={appts} />} />
           <Route path="appointments" element={<Appointments appts={appts} setAppts={setAppts} toast={toast} />} />
-          <Route path="consult" element={<Navigate to={"/consult/" + firstUp.id} replace />} />
+          <Route path="consult" element={<Navigate to={firstUp ? "/consult/" + firstUp.id : "/appointments"} replace />} />
           <Route path="consult/:id" element={<ConsultPage />} />
           <Route path="availability" element={<Availability toast={toast} />} />
         </Route>

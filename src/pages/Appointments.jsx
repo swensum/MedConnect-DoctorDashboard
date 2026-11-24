@@ -6,7 +6,15 @@ import { Avatar, Btn, Chip, Tag, neu } from "../components/ui";
 export default function Appointments({ appts, setAppts, toast }) {
   const nav = useNavigate();
   const [f, setF] = useState("all");
-  const set = (id, status, msg) => { setAppts(appts.map((a) => (a.id === id ? { ...a, status } : a))); toast(msg); };
+ const set = async (id, status, msg) => {
+  try {
+    await api(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    setAppts(appts.map((a) => (a.id === id ? { ...a, status } : a)));
+    toast(msg);
+  } catch (e) {
+    toast(e.message);
+  }
+};
   const list = appts.filter((a) => f === "all" || a.status === f);
   return (
     <div className="grid gap-[22px]">

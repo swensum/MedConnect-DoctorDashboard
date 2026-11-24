@@ -7,11 +7,13 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
-
 model Appointment {
   id          Int      @id @default(autoincrement())
+  doctorId    String   // NEW: the Supabase user id of the doctor who owns this
   patientName String
   reason      String?
   status      String   @default("pending")
   createdAt   DateTime @default(now())
+
+  @@index([doctorId]) // NEW: makes "find this doctor's rows" fast
 }

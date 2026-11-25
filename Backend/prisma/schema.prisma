@@ -20,3 +20,21 @@ model Appointment {
 
   @@index([doctorId])
 }
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+ model Doctor {
+  id              String    @id            // same as the Supabase user id
+  phone           String    @unique
+  fullName        String?
+  specialization  String?
+  licenseNo       String?
+  experienceYears Int?
+  fee             Int?
+  kycStatus       KycStatus @default(NOT_SUBMITTED)
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+}

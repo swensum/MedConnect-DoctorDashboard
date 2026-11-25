@@ -21,3 +21,4 @@ export const ACTIVITY = [
   { t: "Appointment declined: Hari Oli", time: "3 hrs ago", tone: "bad" },
   { t: "Payment received: Rs 500", time: "Yesterday", tone: "ok" },
 ];
+

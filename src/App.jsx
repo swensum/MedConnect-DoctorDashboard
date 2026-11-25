@@ -15,9 +15,8 @@ import Splash from "./pages/Splash";
 const toUi = (a) => ({
   ...a,
   name: a.patientName,
-  age: "–",
-  time: new Date(a.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-  type: "Chat",
+  age: a.age ?? "–",
+  time: new Date(a.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
 });
 
 export default function App() {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { init } from "../components/data";
 import { Avatar, Btn, Chip, Tag, neu } from "../components/ui";
+import { api } from "../supabase";
 
 export default function Appointments({ appts, setAppts, toast }) {
   const nav = useNavigate();

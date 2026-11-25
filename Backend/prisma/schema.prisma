@@ -9,11 +9,14 @@ datasource db {
 }
 model Appointment {
   id          Int      @id @default(autoincrement())
-  doctorId    String   // NEW: the Supabase user id of the doctor who owns this
+  doctorId    String
   patientName String
+  age         Int?                       
   reason      String?
+  type        String   @default("Chat")  
+  startsAt    DateTime @default(now())   
   status      String   @default("pending")
   createdAt   DateTime @default(now())
 
-  @@index([doctorId]) // NEW: makes "find this doctor's rows" fast
+  @@index([doctorId])
 }

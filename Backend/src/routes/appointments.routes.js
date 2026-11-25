@@ -6,7 +6,10 @@ const router = Router();
 
 const appointmentSchema = z.object({
   patientName: z.string().trim().min(2).max(80),
+   age: z.number().int().min(0).max(120).optional(),
   reason: z.string().trim().max(200).optional(),
+  type: z.enum(["Video", "Voice", "Chat"]).default("Chat"),
+  startsAt: z.coerce.date(),
 });
 
 const statusSchema = z.object({
@@ -15,7 +18,8 @@ const statusSchema = z.object({
 
 router.get("/", async (req, res) => {
   const appointments = await prisma.appointment.findMany({
-    where: { doctorId: req.user.id },
+   where: { doctorId: req.user.id },
+  orderBy: { startsAt: "asc" },
   });
   res.json(appointments);
 });

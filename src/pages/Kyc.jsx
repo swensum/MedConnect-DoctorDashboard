@@ -166,10 +166,12 @@ export default function Kyc({ phone, toast, onApproved, onLogout }) {
 
   return (
     <div className="min-h-screen">
-           <header className="flex items-center gap-3 px-4 py-4 min-[821px]:px-8 min-[821px]:py-5">
-        <Logo size={42} />
-        <span className="font-display text-xl font-bold tracking-tight text-navy">MedConnect</span>
-      </header>
+         <header className="flex items-center gap-3 px-4 py-4 min-[821px]:px-8 min-[821px]:py-5">
+  <Logo size={42} />
+  <span className="font-display text-xl font-bold tracking-tight text-navy">MedConnect</span>
+  <span className="flex-1" />
+  <Btn variant="ghost" size="sm" onClick={onLogout}>Sign out</Btn>
+</header>
 
       <main className="mx-auto w-full max-w-[1180px] px-4 pb-10 min-[821px]:px-8">
         {/* ---------- FORM ---------- */}

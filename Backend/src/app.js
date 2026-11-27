@@ -4,6 +4,7 @@ import appointmentsRoutes from "./routes/appointments.routes.js";
 import { requireAuth } from "./middleware/auth.js";
 import meRoutes from "./routes/me.routes.js";
 import kycRoutes from "./routes/kyc.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 
 const app = express();
 app.use(cors({ origin: "http://localhost:5173" }));
@@ -15,6 +16,6 @@ app.get("/health", (req, res) => {
 
 app.use("/appointments", requireAuth,appointmentsRoutes);
 app.use("/me", requireAuth, meRoutes);
-
+app.use("/dashboard", requireAuth, dashboardRoutes);
 app.use("/kyc", requireAuth, kycRoutes);
 export default app;

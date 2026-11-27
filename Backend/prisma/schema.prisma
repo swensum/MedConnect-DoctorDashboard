@@ -37,4 +37,23 @@ enum KycStatus {
   kycStatus       KycStatus @default(NOT_SUBMITTED)
   rejectionReason String?
   createdAt       DateTime  @default(now())
+  documents       KycDocument[]
+}
+enum KycDocKind {
+  LICENSE
+  DEGREE
+  CLINIC_PROOF
+}
+
+model KycDocument {
+  id        Int        @id @default(autoincrement())
+  doctorId  String
+  kind      KycDocKind
+  filePath  String     // location inside the bucket, never a public URL
+  fileName  String     // original name, for display
+  createdAt DateTime   @default(now())
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, kind])
 }

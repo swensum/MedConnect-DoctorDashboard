@@ -81,7 +81,7 @@ export default function App() {
   // Built as an element (not an inner component) so the layout is not remounted on every render.
   const guardEl = !user ? <Navigate to="/login" replace />
     : !verified ? <Navigate to="/register" replace />
-    : <AppLayout onLogout={logout} />;
+      : <AppLayout onLogout={logout} />;
 
   // ---- early returns: keep them AFTER all hooks ----
   if (splash || !ready) return <Splash onDone={endSplash} />;
@@ -95,8 +95,11 @@ export default function App() {
           <Route path="/register" element={
             !user ? <Navigate to="/login" replace />
               : verified ? <Navigate to="/" replace />
-              : <Kyc phone={user} toast={toast} onLogout={logout}
-                  onApproved={() => { setMe({ ...me, kycStatus: "APPROVED" }); nav("/"); }} />
+                : <Kyc phone={user} toast={toast} onLogout={logout}
+                  status={me.kycStatus}
+                  onRefresh={() => api("/me").then(setMe)}
+                  rejectionReason={me.rejectionReason}
+                  onApproved={() => nav("/")} />
           } />
           <Route element={guardEl}>
             <Route index element={<Dashboard appts={appts} />} />

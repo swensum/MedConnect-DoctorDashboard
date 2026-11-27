@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "../supabase";
 import { Btn, Chip, Logo, NeuInput, inset, neu } from "../components/ui";
 
 const SPECS = ["General physician", "Cardiologist", "Dermatologist", "Pediatrician", "Gynecologist", "Orthopedic", "Neurologist", "Psychiatrist", "Dentist", "Other"];
@@ -23,7 +24,7 @@ function UploadTile({ label, sub, file, onFile, toast, required }) {
   const [drag, setDrag] = useState(false);
   const [prog, setProg] = useState(100);
 
-  // Simulated upload progress. TODO: replace with real Firebase Storage upload progress.
+  // Simulated upload progress. TODO (Step 16): replace with a real Supabase Storage upload.
   useEffect(() => {
     if (!file) return;
     setProg(0);
@@ -113,9 +114,9 @@ function Timeline({ approved }) {
 }
 
 /* ---------- page ---------- */
-export default function Kyc({ phone, toast, onApproved, onLogout }) {
-  const [stage, setStage] = useState("form"); // form | submitted | review
-  const [approved, setApproved] = useState(false);
+export default function Kyc({ phone, toast, onApproved, onLogout, status, rejectionReason, onRefresh }) {
+  const [stage, setStage] = useState(status === "PENDING" ? "review" : "form"); // form | submitted | review
+  const approved = status === "APPROVED";
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -141,11 +142,28 @@ export default function Kyc({ phone, toast, onApproved, onLogout }) {
   const pct = Math.round((doneCount / checks.length) * 100);
   const valid = doneCount === checks.length;
 
-  // TODO: upload files to Firebase Storage and save the doctor profile here
-  const submit = () => {
+  // Save the form to our backend (POST /kyc). Status becomes PENDING in the database.
+  // NOTE: the three files are NOT saved yet. That is Step 16 (Supabase Storage).
+  const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
-    setTimeout(() => { setBusy(false); setStage("submitted"); }, 1500);
+    try {
+      await api("/kyc", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: name.trim(),
+          specialization: spec === "Other" ? other.trim() : spec,
+          licenseNo: lic.trim(),
+          experienceYears: Number(exp),
+          fee: fee ? Number(fee) : undefined, // undefined is dropped from the JSON
+        }),
+      });
+      await onRefresh().catch(() => {}); // pull the new PENDING status into the app
+      setStage("submitted");
+    } catch (e) {
+      toast(e.message);
+    }
+    setBusy(false);
   };
 
   useEffect(() => {
@@ -154,24 +172,40 @@ export default function Kyc({ phone, toast, onApproved, onLogout }) {
     return () => clearTimeout(t);
   }, [stage]);
 
-  // Demo only: fake admin approval after 15 seconds (same as the mobile app).
-  // TODO: replace with a Firestore listener on the doctor's kycStatus.
+  // If an admin rejects while we wait, go back to the form (the reason shows at the top).
+  useEffect(() => {
+    if (status === "REJECTED") setStage("form");
+  }, [status]);
+
+  // Polling: while waiting for review, ask the server every 10 s and when the tab regains focus.
+  const refreshRef = useRef(onRefresh);
+  refreshRef.current = onRefresh; // always points to the newest function
+
   useEffect(() => {
     if (stage !== "review" || approved) return;
-    const t = setTimeout(() => setApproved(true), 15000);
-    return () => clearTimeout(t);
+    const check = () => refreshRef.current().catch(() => {});
+    const id = setInterval(check, 10000);
+    window.addEventListener("focus", check);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", check);
+    };
   }, [stage, approved]);
 
-  const refresh = () => { setRefreshing(true); setTimeout(() => setRefreshing(false), 1200); };
+  const refresh = async () => {
+    setRefreshing(true);
+    try { await onRefresh(); } catch { toast("Could not check status"); }
+    setRefreshing(false);
+  };
 
   return (
     <div className="min-h-screen">
-         <header className="flex items-center gap-3 px-4 py-4 min-[821px]:px-8 min-[821px]:py-5">
-  <Logo size={42} />
-  <span className="font-display text-xl font-bold tracking-tight text-navy">MedConnect</span>
-  <span className="flex-1" />
-  <Btn variant="ghost" size="sm" onClick={onLogout}>Sign out</Btn>
-</header>
+      <header className="flex items-center gap-3 px-4 py-4 min-[821px]:px-8 min-[821px]:py-5">
+        <Logo size={42} />
+        <span className="font-display text-xl font-bold tracking-tight text-navy">MedConnect</span>
+        <span className="flex-1" />
+        <Btn variant="ghost" size="sm" onClick={onLogout}>Sign out</Btn>
+      </header>
 
       <main className="mx-auto w-full max-w-[1180px] px-4 pb-10 min-[821px]:px-8">
         {/* ---------- FORM ---------- */}
@@ -211,6 +245,12 @@ export default function Kyc({ phone, toast, onApproved, onLogout }) {
 
             {/* Right: form */}
             <section className={`${neu} grid gap-8 p-6 sm:p-8`}>
+              {status === "REJECTED" && (
+                <div className="rounded-[14px] bg-bad/10 p-4 text-[13px] text-bad" role="alert">
+                  <b>Your last submission was rejected.</b> {rejectionReason || "Please check your details and documents."} Fix the issues and submit again.
+                </div>
+              )}
+
               <div className="grid gap-5">
                 <div className="flex items-center gap-3">
                   <span className="grid size-8 place-items-center rounded-full bg-navy font-display text-sm font-bold text-white">1</span>
@@ -230,7 +270,7 @@ export default function Kyc({ phone, toast, onApproved, onLogout }) {
 
                 <div className="grid gap-5 sm:grid-cols-2">
                   <NeuInput label="Experience (years)" inputMode="numeric" placeholder="e.g. 8" value={exp} onChange={(e) => setExp(e.target.value.replace(/\D/g, "").slice(0, 2))} />
-                 <NeuInput label="Consultation fee (Rs) · Optional" inputMode="numeric" placeholder="e.g. 500" value={fee} onChange={(e) => setFee(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <NeuInput label="Consultation fee (Rs) · Optional" inputMode="numeric" placeholder="e.g. 500" value={fee} onChange={(e) => setFee(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
               </div>
 

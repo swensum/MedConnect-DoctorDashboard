@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../supabase";
+import { api, supabase } from "../supabase";
 import { Btn, Chip, Logo, NeuInput, inset, neu } from "../components/ui";
 
 const SPECS = ["General physician", "Cardiologist", "Dermatologist", "Pediatrician", "Gynecologist", "Orthopedic", "Neurologist", "Psychiatrist", "Dentist", "Other"];
@@ -18,27 +18,49 @@ const Spin = ({ cls = "size-5" }) => (
   </svg>
 );
 
-/* ---------- upload tile (click or drag and drop, with upload progress) ---------- */
-function UploadTile({ label, sub, file, onFile, toast, required }) {
+/* ---------- upload tile: sends the file to a private Supabase bucket ---------- */
+const MIME = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
+
+function UploadTile({ kind, label, sub, file, onFile, toast, required }) {
   const ref = useRef(null);
   const [drag, setDrag] = useState(false);
-  const [prog, setProg] = useState(100);
+  const [uploading, setUploading] = useState(false);
 
-  // Simulated upload progress. TODO (Step 16): replace with a real Supabase Storage upload.
-  useEffect(() => {
-    if (!file) return;
-    setProg(0);
-    const t = setInterval(() => setProg((p) => (p >= 100 ? 100 : Math.min(100, p + 9 + Math.random() * 8))), 140);
-    return () => clearInterval(t);
-  }, [file]);
-
-  const take = (f) => {
-    if (!f) return;
-    if (!/\.(pdf|jpe?g|png)$/i.test(f.name)) return toast("Use a PDF, JPG or PNG file");
+  const take = async (f) => {
+    if (!f || uploading) return;
+    const ext = f.name.split(".").pop().toLowerCase();
+    if (!MIME[ext]) return toast("Use a PDF, JPG or PNG file");
     if (f.size > MAX) return toast("File must be under 10 MB");
-    onFile(f);
+
+    setUploading(true);
+    try {
+      // 1. ask our backend for permission and a one-time upload link
+      const { path, token } = await api("/kyc/upload-url", {
+        method: "POST",
+        body: JSON.stringify({ kind, fileName: f.name, contentType: MIME[ext], size: f.size }),
+      });
+      // 2. send the file straight to the private bucket
+      const { error } = await supabase.storage
+        .from("kyc-documents")
+        .uploadToSignedUrl(path, token, f, { contentType: MIME[ext] });
+      if (error) throw error;
+      // 3. tell our backend the upload finished, so it saves the path
+      await api("/kyc/documents", { method: "POST", body: JSON.stringify({ kind, path, fileName: f.name }) });
+      onFile({ name: f.name, size: f.size }); // only set AFTER the whole upload succeeded
+    } catch (e) {
+      toast(e.message || "Upload failed");
+    }
+    setUploading(false);
   };
-  const uploading = file && prog < 100;
+
+  const remove = async () => {
+    try {
+      await api(`/kyc/documents/${kind}`, { method: "DELETE" });
+      onFile(null);
+    } catch (e) {
+      toast(e.message);
+    }
+  };
 
   return (
     <div
@@ -54,19 +76,16 @@ function UploadTile({ label, sub, file, onFile, toast, required }) {
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-navy">{label} {required && <span className="text-[11px] font-semibold text-t2">· Required</span>}</div>
           <div className="truncate text-[12px] text-t2">
-            {file ? `${file.name} · ${size(file.size)}` : sub || "PDF, JPG or PNG · max 10 MB"}
+            {uploading ? "Uploading…" : file ? `${file.name} · ${size(file.size)}` : sub || "PDF, JPG or PNG · max 10 MB"}
           </div>
         </div>
         <input ref={ref} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { take(e.target.files[0]); e.target.value = ""; }} />
-        {file && !uploading && <Chip sm onClick={() => onFile(null)}>Remove</Chip>}
+        {file && !uploading && <Chip sm onClick={remove}>Remove</Chip>}
         <Btn variant="ghost" size="sm" disabled={uploading} onClick={() => ref.current.click()}>{file ? "Change" : "Upload"}</Btn>
       </div>
       {uploading && (
-        <div className="flex items-center gap-3">
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-bg shadow-inset" role="progressbar" aria-valuenow={Math.round(prog)} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${label}`}>
-            <div className="h-full rounded-full bg-navy transition-all duration-150 motion-reduce:transition-none" style={{ width: `${prog}%` }} />
-          </div>
-          <span className="w-9 text-right text-[11px] font-semibold text-navy">{Math.round(prog)}%</span>
+        <div className="h-2 overflow-hidden rounded-full bg-bg shadow-inset" role="progressbar" aria-label={`Uploading ${label}`}>
+          <div className="h-full w-1/3 rounded-full bg-navy animate-[load_2.4s_ease-in-out_infinite] motion-reduce:animate-none" />
         </div>
       )}
     </div>
@@ -143,7 +162,7 @@ export default function Kyc({ phone, toast, onApproved, onLogout, status, reject
   const valid = doneCount === checks.length;
 
   // Save the form to our backend (POST /kyc). Status becomes PENDING in the database.
-  // NOTE: the three files are NOT saved yet. That is Step 16 (Supabase Storage).
+  // The files were already uploaded and recorded by the upload tiles.
   const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
@@ -284,9 +303,9 @@ export default function Kyc({ phone, toast, onApproved, onLogout, status, reject
                     <p className="text-[12px] text-t2">Clear photos or PDFs. Our team reviews these before your profile goes live.</p>
                   </div>
                 </div>
-                <UploadTile required label="Medical license" file={fLic} onFile={setFLic} toast={toast} />
-                <UploadTile required label="Degree certificate" file={fDeg} onFile={setFDeg} toast={toast} />
-                <UploadTile label="Clinic / hospital proof" sub="Optional · add later if you do not have one yet" file={fClinic} onFile={setFClinic} toast={toast} />
+                <UploadTile kind="LICENSE" required label="Medical license" file={fLic} onFile={setFLic} toast={toast} />
+                <UploadTile kind="DEGREE" required label="Degree certificate" file={fDeg} onFile={setFDeg} toast={toast} />
+                <UploadTile kind="CLINIC_PROOF" label="Clinic / hospital proof" sub="Optional · add later if you do not have one yet" file={fClinic} onFile={setFClinic} toast={toast} />
               </div>
 
               <div>
